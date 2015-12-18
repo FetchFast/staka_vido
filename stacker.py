@@ -27,7 +27,7 @@ trace_style = '"fill:none;stroke:#00ffff;stroke-opacity:1;stroke-width:0.1;strok
 ##################################################
 #set path and file information.
 #maybe one day replace this with some sort of GUI.
-workingpath = os.path.abspath("C:/Users/rlaney1/Documents/personal/")
+workingpath = os.path.abspath("/home/laz/Documents/Goldfinger/designs/yoda_bust/")
 in_name = "yodabust.svg"
 out_name = "yodabust_mod.svg"
 ##################################################
@@ -218,8 +218,8 @@ with open(infilepath,'r') as infile:
             doc.header +='   xmlns="http://www.w3.org/2000/svg"\n'
             doc.header +='   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"\n'
             doc.header +='   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n'
-            doc.header +='   width="' + size.width + '"\n'
-            doc.header +='   height="' + size.height + '"\n'
+            doc.header +='   width="' + size.width + ' mm"\n'
+            doc.header +='   height="' + size.height + ' mm"\n'
             doc.header +='   id="' + out_name + '"\n'
             doc.header +='   version="1.1"\n'
             doc.header +='   inkscape:version="0.91 r13725"\n'
@@ -310,14 +310,16 @@ with open(outfilepath,'w') as outfile:
         #outfile.write('     style="' + curr_layer.style + '">\n')
 
         #group all polygons in this layer together
+        #NOTE: GCodeTools doesn't recognize polygons
+        #so this will be formatted as a path in inkscape
         outfile.write('    <g\n')
         outfile.write('       id="poly_group' + layer_str + '">\n')
         for poly_num,curr_poly in enumerate(curr_layer.poly):
             #go through each polygon in the current layer
             #then write the appropriate info to the output
             poly_str=str(poly_num)            
-            outfile.write('      <polygon\n')
-            outfile.write('         points="' + curr_poly.point_str + '"\n')
+            outfile.write('      <path\n')
+            outfile.write('         d="M ' + curr_poly.point_str + ' Z"\n')
             outfile.write('         style=' + curr_poly.style + '/>\n')
         #after writing all the polygons
         #group close the group around them
