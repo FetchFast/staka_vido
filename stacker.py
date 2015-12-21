@@ -24,10 +24,13 @@ from shapely.geometry import Polygon, LineString
 cut_style = '"fill:#ffffff;stroke:#000000;stroke-opacity:1;stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;fill-opacity:1"'
 layer_style = '"stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;stroke:#000000;stroke-opacity:1;fill:#ffffff;fill-opacity:1"'
 trace_style = '"fill:none;stroke:#00ffff;stroke-opacity:1;stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;fill-opacity:0"'
+
+px_to_mm = 3.54331
+
 ##################################################
 #set path and file information.
 #maybe one day replace this with some sort of GUI.
-workingpath = os.path.abspath("/home/laz/Documents/Goldfinger/designs/yoda_bust/")
+workingpath = os.path.abspath("/home/laz/Documents/Goldfinger/designs/yoda_bust")
 in_name = "yodabust.svg"
 out_name = "yodabust_mod.svg"
 ##################################################
@@ -54,15 +57,9 @@ class layer:
     #this class defines the layer object.  Each layer object will hold one or more objects
     #these objecs will correspond to the items to be drawn in inkscape
     def __init__(self,style_str):
-        self.path_count=0
-        self.path=list()
         self.poly_count=0
         self.poly=list()
         self.style = style_str
-
-    def add_path(self,path):
-        self.path.append(path)
-        self.path_count+=1
 
     def add_poly(self,poly):
         self.poly.append(poly)
@@ -72,63 +69,27 @@ class poly:
     #this class defines the inkscape polygon object.  Each path consists of:
     ##one Polygon object defined by shapely
     ##a style for the polygon
+    #
+    #A polygon will have one or more traces
+    ##the traces will be polygons that represent where upper subsequent layers
+    ##lay over the this polygon
     def __init__(self,point_str,style,poly_type):
         self.point_str = point_str
-        self.shape=Polygon(self.point_str_to_list(point_str))
+        self.shape=Polygon(point_str_to_list(point_str))
         self.style=style
         self.type = poly_type
+        self.traces = list()
+        self.trace_count = 0
 
-
-    #a function to convert the points string to a list for shapely
-    def point_str_to_list(self,point_str):
-        #this function will create a list of tuples (x,y)
-        #that correspond to the geometry of a polygon
-        #it will take the string, strip off one point at a time
-        #store it in the list, then cut the string to remove the point
-        #it will repeat until the string is empty
+    def add_trace(self, geom):
+        #this function adds a shapely geometric object
+        #to this polygon
+        #each polygon may have zero to many traces
+        #the traces represent areas on this polygon
+        #where the layer above covers
+        self.trace_count+=1
+        self.traces.append(geom)
         
-        point_list=list()
-        while len(point_str)>0:
-            #search for the comma that separates the x from the y
-            x_end=point_str.find(',')
-            x=float(point_str[:x_end])
-            #split out the remaining string
-            point_str=point_str[x_end+1:]
-            #search for the space that separates the y from the next coord
-            y_end=point_str.find(' ')
-            #if we return a value, use it
-            #otherwise, we've hit the end of the string, and this is the last coord
-            #use the remaining string
-            if y_end>=0:
-                y=float(point_str[:y_end])
-                point_str=point_str[y_end+1:]
-            else:
-                y=float(point_str)
-                point_str=list()
-            #take the coordinate pair and add it to the list
-            point_list.append((x,y))
-        return point_list
-
-class path:
-    #this object defines the inkscape path object
-    #this represents line segments that are not closed
-    #useful for tracing outlines of clipped polygons
-    def __init__(self,point_list,style):
-        self.point_list = point_list
-        self.style=style
-        self.point_str=self.point_list_to_str(point_list)
-
-    def point_list_to_str(self,point_list):
-        #use this to make an inkscape-compatible string
-        #this should be used to write paths from existing polygons
-        point_str=""
-        for point in point_list:
-            point_str+= str(point[0]) + ',' + str(point[1]) + " "
-
-        #remove the last space as extraneous
-        point_str=point_str[:-1]
-
-        return point_str
             
     
 
@@ -144,20 +105,63 @@ def extract_size(line):
     output_int = collections.namedtuple('doc_size',['width','height'])
     output=output_int(width,height)
     return output
+    
 #a function to extract the layer number for the existing file
 def get_layer_number(line):
     layer_start = line.find('"layer')+6
     layer_end = line.find('"',layer_start)
     layer = line[layer_start:layer_end]
     return layer
+    
 #a function to extract the points string from the existing file
 def get_points(line):
     points_start = line.find('points="')+8
     points_end = line.find('"',points_start)
     points = line[points_start:points_end]
     return points
+    
+def point_list_to_str(point_list):
+    #use this to make an inkscape-compatible string
+    #this should be used to write paths from existing polygons
+    point_str=""
+    for point in point_list:
+        point_str+= str(point[0]) + ',' + str(point[1]) + " "
 
-def add_trace(layer_above,layer_below):
+    #remove the last space as extraneous
+    point_str=point_str[:-1]
+
+    return point_str
+    
+def point_str_to_list(point_str):
+    #this function will create a list of tuples (x,y)
+    #that correspond to the geometry of a polygon
+    #it will take the string, strip off one point at a time
+    #store it in the list, then cut the string to remove the point
+    #it will repeat until the string is empty
+    
+    point_list=list()
+    while len(point_str)>0:
+        #search for the comma that separates the x from the y
+        x_end=point_str.find(',')
+        x=float(point_str[:x_end])
+        #split out the remaining string
+        point_str=point_str[x_end+1:]
+        #search for the space that separates the y from the next coord
+        y_end=point_str.find(' ')
+        #if we return a value, use it
+        #otherwise, we've hit the end of the string, and this is the last coord
+        #use the remaining string
+        if y_end>=0:
+            y=float(point_str[:y_end])
+            point_str=point_str[y_end+1:]
+        else:
+            y=float(point_str)
+            point_str=list()
+        #take the coordinate pair and add it to the list
+        point_list.append((x,y))
+    return point_list
+
+def get_traces(layer_above,layer_below):
     #this function takes as an input, two layer objects
     #it will trace the layer above onto the layer below
     #and clip any excess lines
@@ -173,15 +177,14 @@ def add_trace(layer_above,layer_below):
                 trace_poly = curr_poly.shape.intersection(check_poly.shape)
                 if trace_poly.type == 'Polygon':
                     #we make only one path
-                    new_path = path(trace_poly.exterior.coords[:],trace_style)
-                    #add the path to the layer below
-                    layer_below.add_path(new_path)
-                else:
+                    curr_poly.add_trace(trace_poly)
+                elif trace_poly.type == 'MultiPolygon':
                     #in this case, we have a multipolygon
                     #we need to extract each polygon and make a path
                     for part in trace_poly:
-                        new_path=path(part.exterior.coords[:],trace_style)
-                        layer_below.add_path(new_path)
+                        curr_poly.add_trace(part)
+                else:
+                    print "Crazy intersection: " + trace_poly.type
  
 #Set the path for files to read and write
 infilepath = os.path.join(workingpath,in_name)
@@ -218,8 +221,8 @@ with open(infilepath,'r') as infile:
             doc.header +='   xmlns="http://www.w3.org/2000/svg"\n'
             doc.header +='   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"\n'
             doc.header +='   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n'
-            doc.header +='   width="' + size.width + ' mm"\n'
-            doc.header +='   height="' + size.height + ' mm"\n'
+            doc.header +='   width="' + size.width + '"\n'
+            doc.header +='   height="' + size.height + '"\n'
             doc.header +='   id="' + out_name + '"\n'
             doc.header +='   version="1.1"\n'
             doc.header +='   inkscape:version="0.91 r13725"\n'
@@ -268,8 +271,6 @@ with open(infilepath,'r') as infile:
             new_poly = poly(point_str,cut_style,poly_type)
             #add the poly object to the layer object
             new_layer.add_poly(new_poly)
-
-
             
         
         elif line.find('</g>')>=0:
@@ -290,13 +291,14 @@ with open(infilepath,'r') as infile:
 #we want to add traces to every layer except the last
 for i in range(len(doc.layer)-1):
     print "Fixing layer: " + str(i)
-    add_trace(doc.layer[i+1],doc.layer[i])
+    get_traces(doc.layer[i+1],doc.layer[i])
     
     
 
 #########################################
 #This section will write out the data from the SVG Structure
 with open(outfilepath,'w') as outfile:
+    #write out starting information
     outfile.write(doc.first_line)
     outfile.write(doc.header)
     for layer_num, curr_layer in enumerate(doc.layer):
@@ -321,22 +323,13 @@ with open(outfilepath,'w') as outfile:
             outfile.write('      <path\n')
             outfile.write('         d="M ' + curr_poly.point_str + ' Z"\n')
             outfile.write('         style=' + curr_poly.style + '/>\n')
+            for trace_poly in curr_poly.traces:
+                #include all the traces in the same group
+                outfile.write('      <path\n')
+                outfile.write('         d="M ' + point_list_to_str(trace_poly.exterior.coords[:]) + ' Z"\n')
+                outfile.write('         style=' + trace_style + '/>\n')
+                
         #after writing all the polygons
-        #group close the group around them
-        outfile.write('    </g>\n')
-        #write all the paths
-        #group all paths in the layer into one group
-        outfile.write('    <g\n')
-        outfile.write('       id="path_group' + layer_str + '">\n')
-        for path_num,curr_path in enumerate(curr_layer.path):
-            #go through each path in the current layer
-            #then write the appropriate info to the output
-            path_str=str(path_num)
-            outfile.write('      <path\n')
-            outfile.write('         style=' + curr_path.style + '\n')
-            outfile.write('         d="M ' + curr_path.point_str + '"\n')
-            outfile.write('         id="path'+layer_str + '-' +path_str + ' Z"/>\n')
-        #after writing all the paths
         #group close the group around them
         outfile.write('    </g>\n')
         #write out the close for the layer
