@@ -32,7 +32,9 @@ def call_slic3r(inputs):
     #force no skits
     options.append("--skirts")
     options.append("0")
-
+    #put print center at origin
+    options.append("--print-center")
+    options.append("0,0")
     #after all options are added, the file name should be appended
     options.append(inputs.inputfile)
     
