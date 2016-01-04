@@ -449,6 +449,9 @@ def usage():
     print '   --s2 specify the spacing between the centers of the cuts for the second axis'
     print '   --n1 specify the number of layers for the first axis'
     print '   --n2 specify the number of layers for the second axis'
+    print '   --add-traces this option will enable adding traces to layers'
+    print '   --verbose this option will enable additional output text'
+    
 
 if __name__ == "__main__":
     inputs = input_class()
