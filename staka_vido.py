@@ -271,11 +271,12 @@ def write_to_inkscape(inputs, svg_data):
                 outfile.write('      <path\n')
                 outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
                 outfile.write('         style=' + curr_poly.style + '/>\n')
-                for trace_poly in curr_poly.traces:
-                    #include all the traces in the same group
-                    outfile.write('      <path\n')
-                    outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
-                    outfile.write('         style=' + trace_style + '/>\n')
+                if inputs.traces:
+					for trace_poly in curr_poly.traces:
+						#include all the traces in the same group
+						outfile.write('      <path\n')
+						outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
+						outfile.write('         style=' + trace_style + '/>\n')
                     
             #after writing all the polygons
             #group close the group around them
@@ -497,16 +498,16 @@ if __name__ == "__main__":
     #pass the inputs to the correct function
     #use thickness as a proxy for single cuts
     if inputs.thickness <> '':
-        stacker(inputs)
+		stacker(inputs)
         #create a document to store the data
-        stack_doc = svg_data()
+		stack_doc = svg_data()
         #read in the data from the svg file
-        read_svg(inputs.outputfile,stack_doc)
-        if inputs.traces:
-            for i in range(len(stack_doc.layer)-1):
-                get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
+		read_svg(inputs.outputfile,stack_doc)
+        #always get traces
+		for i in range(len(stack_doc.layer)-1):
+			get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
                 
-        write_to_inkscape(inputs,stack_doc)
+		write_to_inkscape(inputs,stack_doc)
         
     else:
         dicer(inputs)
