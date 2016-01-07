@@ -269,12 +269,12 @@ def write_to_inkscape(inputs, svg_data):
                 #then write the appropriate info to the output
                 poly_str=str(poly_num)            
                 outfile.write('      <path\n')
-                outfile.write('         d="M ' + curr_poly.point_str + ' Z"\n')
+                outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
                 outfile.write('         style=' + curr_poly.style + '/>\n')
                 for trace_poly in curr_poly.traces:
                     #include all the traces in the same group
                     outfile.write('      <path\n')
-                    outfile.write('         d="M ' + point_list_to_str(trace_poly.exterior.coords[:]) + ' Z"\n')
+                    outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
                     outfile.write('         style=' + trace_style + '/>\n')
                     
             #after writing all the polygons
@@ -287,7 +287,37 @@ def write_to_inkscape(inputs, svg_data):
         outfile.write('</svg>\n')
         outfile.closed 
              
-
+def scale_and_flip(point_str):
+	#this function will take a point string
+	#and scale and flip it for inkscape
+	#by default, inkscape assumes units are in pixels
+	#and assumes 90 pixels per inch
+	#slicer outputs units in mm
+	#90 ppi/25.4 mm per inch = 3.54331 scaling
+	#inkscape inverts y coordinates, so we need to flip the y coordinate
+	
+	scale = 3.54331
+	new_point_str = ""
+	while string.find(point_str,",")>=0:
+		#as long as a comma is in the string
+		#we have at least one more pair of coordinates
+		end_position = string.find(point_str,",")
+		new_x = scale*float(point_str[:end_position])
+		point_str = point_str[end_position+1:]
+		#if there is a space in the string, then there are at least two
+		if string.find(point_str," ") >= 0:
+			end_position = string.find(point_str," ")
+			new_y = -scale*float(point_str[:end_position])
+			point_str = point_str[end_position+1:]
+			new_point_str += str(new_x) + "," + str(new_y) + " "
+		else:
+			#this is the last coordinate
+			new_y = -scale * float(point_str)
+			point_str = ""
+			new_point_str += str(new_x) + "," + str(new_y)
+		
+	return new_point_str
+			
 def get_args(argv,inputs):
     
     try:
