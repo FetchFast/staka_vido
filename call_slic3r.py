@@ -50,14 +50,20 @@ def call_slic3r(inputs):
         for opt in options:
             slic3r_command.append(opt)
             
+        if inputs.verbose:
+			for command in slic3r_command:
+				print command
         subprocess.call(slic3r_command)
 
-    elif sting.find(test_plat,"Linux")>=0:
+    elif string.find(test_plat,"Linux")>=0:
         #in this case, found windows
         slic3r_command = list()
         slic3r_command.append('slic3r')
         for opt in options:
-            slicer_command.append(opt)
+            slic3r_command.append(opt)
+        if inputs.verbose:
+			for command in slic3r_command:
+				print command
         
         subprocess.call(slic3r_command)
 

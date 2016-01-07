@@ -25,8 +25,7 @@ class input_class:
         self.t1 = ''
         self.t2 = ''
         self.euler_angle = ''
-        self.ea1 = ''
-        self.ea2 = ''
+        self.orient = ''
         self.space1 = ''
         self.space2 = ''
         self.count1 = ''
@@ -297,8 +296,7 @@ def get_args(argv,inputs):
                                    "ofile=",
                                    "t1=",
                                    "t2=",
-                                   "r1=",
-                                   "r2=",
+                                   "orient=",
                                    "s1=",
                                    "s2=",
                                    "n1=",
@@ -330,13 +328,10 @@ def get_args(argv,inputs):
             print 'Second Thickness is ', str(inputs.t2)
         elif opt == '-r':
             inputs.euler_angle = extract_angles(arg)
-            print 'Single rotation is ', inputs.euler_angle
-        elif opt == '--r1':
-            inputs.ea1 = extract_angles(arg)
-            print 'First rotation is ', inputs.ea1
-        elif opt == '--r2':
-            inputs.ea2 = extract_angles(arg)
-            print 'Second rotation is ', inputs.ea2
+            print 'Rotation is ', inputs.euler_angle
+        elif opt == '--orient':
+            inputs.orient = float(arg)
+            print 'Orientation of second cut is ', inputs.orient
         elif opt == '--s1':
             inputs.space1 = float(arg)
             print 'First spacing is ', str(inputs.space1)
@@ -369,16 +364,16 @@ def check_inputs(inputs):
         inputs.single = True
     if inputs.t1 <> '' or \
        inputs.t2 <> '' or \
-       inputs.ea1 <> '' or \
-       inputs.ea2 <> '' or \
+       inputs.orient <> '' or \
        inputs.space1 <> '' or \
        inputs.space2 <> '' or \
        inputs.count1 <> '' or \
        inputs.count2 <> '':
         inputs.double = True
     if inputs.single and inputs.double:
-        print "Options for a single cuts and double cuts specified."
-        sys.exit(2)
+		if inputs.verbose:
+			print "Options for a single cuts and double cuts specified."            
+		sys.exit(2)
     #Specify either spacing, or counts, not both
     have_space = False
     have_count = False
@@ -387,7 +382,8 @@ def check_inputs(inputs):
     if inputs.count1 <> '' or inputs.count2 <> '':
         have_count = True
     if have_space and have_count:
-        print "Options specify spacing and counts.  Only once can be specified."
+        if inputs.verbose:
+			print "Options specify spacing and counts.  Only once can be specified."
         sys.exit(2)
         
 def load_defaults(inputs):
@@ -403,15 +399,15 @@ def load_defaults(inputs):
        inputs.t1 == '' and \
        inputs.t2 == '' and \
        inputs.euler_angle == '' and \
-       inputs.ea1 == '' and \
-       inputs.ea2 == '' and \
+       inputs.orient == '' and \
        inputs.space1 == '' and \
        inputs.space2 == '' and \
        inputs.count1 == '' and \
        inputs.count2 == '':
         inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
         inputs.euler_angle = (0,0,0)
-        print "Default settings for single slice set"
+        if inputs.verbose:
+			print "Default settings for single slice set"
     #if t1 is specified, but not t2, assume they are the same
     if inputs.t1 <> '' and inputs.t2 == '':
         inputs.t2 = inputs.t1
@@ -442,9 +438,8 @@ def usage():
           ' specify the thickness of the first material'
     print '   --t2 if using two materials for opposite directions,' \
           ' specify the thickness of the second material'
-    print '   -r specify the euler angle rotation z-x-z (extrinsic) used for stacking'
-    print '   --r1 specify the first euler angle rotation for crossed cut assembly'
-    print '   --r2 specify the second euler angle rotation for crossed cut assembly'
+    print '   -r specify the euler angle rotation z-x-z (extrinsic) used for rotating the STL'
+    print '   --orient specify the angle in degrees for the orientation of the second slices'
     print '   --s1 specify the spacing between the centers of the cuts for the first axis'
     print '   --s2 specify the spacing between the centers of the cuts for the second axis'
     print '   --n1 specify the number of layers for the first axis'
