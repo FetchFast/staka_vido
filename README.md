@@ -1,4 +1,4 @@
-#stacker
+#Staka Vido
 
 This software is written to take an STL file and pass it to Slic3r.
 It will use Slic3r's slice-to-svg function to cut the object into layers.

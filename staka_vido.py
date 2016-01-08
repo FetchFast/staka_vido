@@ -15,6 +15,7 @@ from shapely.geometry import Polygon, LineString
 cut_style = '"fill:#ffffff;stroke:#000000;stroke-opacity:1;stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;fill-opacity:1"'
 layer_style = '"stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;stroke:#000000;stroke-opacity:1;fill:#ffffff;fill-opacity:1"'
 trace_style = '"fill:none;stroke:#00ffff;stroke-opacity:1;stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;fill-opacity:0"'
+mark_area_style = '"fill:#ffffff;stroke:#ff00ff;stroke-opacity:1;stroke-width:0.1;stroke-miterlimit:4;stroke-dasharray:none;fill-opacity:1"'
 
 
 class input_class:
@@ -34,6 +35,7 @@ class input_class:
         self.double = False
         self.traces = False
         self.verbose = False
+        self.mark_areas = False
 
 class svg_data:
     #this class holds all the information for an SVG document
@@ -74,6 +76,8 @@ class poly:
         self.type = poly_type
         self.traces = list()
         self.trace_count = 0
+        self.mark_areas = list()
+        self.mark_count = 0
 
     def add_trace(self, geom):
         #this function adds a shapely geometric object
@@ -83,6 +87,16 @@ class poly:
         #where the layer above covers
         self.trace_count+=1
         self.traces.append(geom)
+        
+    def add_mark_area(self, geom):
+		#this function adds a mark area to a geometric object
+		#to this polygon
+		#each poly may have to many mark areas
+		#this mark area represents the portion of the polygon's trace
+		#that is covered by a polygon's trace on the layer above
+		self.mark_count += 1
+		self.mark_areas.append(geom)
+
     
 #create a function to extract the size information from the existing file
 def extract_size(line,svg_data):
@@ -150,7 +164,58 @@ def point_str_to_list(point_str):
         #take the coordinate pair and add it to the list
         point_list.append((x,y))
     return point_list
-
+    
+def get_mark_areas(layer_collection):
+	#this function will go through the layers
+	#it will look at the traces on each layer
+	#and find a place to put the layer number and orientation marker
+	#It is known from previous construction
+	#that the trace polygons are areas on each layer that are covered 
+	#by the layer above
+	#so anything put in that poly will be invisible when fully assembled
+	#but to cut alignment holes in the upper layer
+	#to see the marks in the lower layer
+	#we need to make sure the mark is placed in an area of the lower layer
+	#that corresponds to an area that is covered in the upper layer
+	#in other words, we can't put the marker in an area on the lower layer
+	#that would require cutting a hole in the upper layer
+	#that would be visible after assembly
+	
+	#start by going through the layers
+	for i,curr_layer in enumerate(layer_collection.layer):
+		#then search each polygon in the current layer
+		for curr_poly in curr_layer.poly:
+			#check each trace in this polygon
+			for curr_trace in curr_poly.traces:
+				#if we have a trace in this polygon
+				#we need to cycle through all the traces on the layer above
+				#which means cycle through each polygon
+				#then cycle through its traces
+				for check_poly in layer_collection.layer[i+1].poly:
+					#then search through each trace
+					for check_trace in check_poly.traces:
+						mark_area = curr_trace.intersection(check_trace)
+						if mark_area.type == 'Polygon':
+							#only one overlapping area
+							curr_poly.add_mark_area(mark_area)
+						elif mark_area.type == 'MultiPolygon':
+							#in this case, extract each poly separately
+							for part in mark_area:
+								curr_poly.add_mark_area(mark_area)
+						elif mark_area.type == "GeometryCollection":
+							#if it's a geom collection
+							#and len is zero, no issue
+							if len(mark_area) == 0:
+								pass
+							else:
+								print "Error with mark areas.  Geometry Collection Length non-zero"
+						else:
+							print "Trouble with mark area " + mark_area.type
+			
+			
+		
+	
+	
 def get_traces(layer_above,layer_below):
     #this function takes as an input, two layer objects
     #it will trace the layer above onto the layer below
@@ -265,19 +330,26 @@ def write_to_inkscape(inputs, svg_data):
             outfile.write('    <g\n')
             outfile.write('       id="poly_group' + layer_str + '">\n')
             for poly_num,curr_poly in enumerate(curr_layer.poly):
-                #go through each polygon in the current layer
-                #then write the appropriate info to the output
-                poly_str=str(poly_num)            
-                outfile.write('      <path\n')
-                outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
-                outfile.write('         style=' + curr_poly.style + '/>\n')
-                if inputs.traces:
+				#go through each polygon in the current layer
+				#then write the appropriate info to the output
+				poly_str=str(poly_num)            
+				outfile.write('      <path\n')
+				outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
+				outfile.write('         style=' + curr_poly.style + '/>\n')
+				if inputs.traces:
 					for trace_poly in curr_poly.traces:
 						#include all the traces in the same group
 						outfile.write('      <path\n')
 						outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
 						outfile.write('         style=' + trace_style + '/>\n')
-                    
+				if inputs.mark_areas:	
+					for mark_area in curr_poly.mark_areas:
+						#includethe mark areas, too
+						outfile.write('      <path\n')
+						outfile.write('         d="M ' + scale_and_flip(point_list_to_str(mark_area.exterior.coords[:])) + ' Z"\n')
+						outfile.write('         style=' + mark_area_style + '/>\n')
+						
+						
             #after writing all the polygons
             #group close the group around them
             outfile.write('    </g>\n')
@@ -379,6 +451,8 @@ def get_args(argv,inputs):
             inputs.traces = True
         elif opt in ("-v", "--verbose"):
             inputs.verbose = True
+        elif opt == "--mark-areas":
+			inputs.mark_areas = True
         else:
             print "Argument Error"
             
@@ -477,40 +551,66 @@ def usage():
     print '   --n2 specify the number of layers for the second axis'
     print '   --add-traces this option will enable adding traces to layers'
     print '   --verbose this option will enable additional output text'
+    print '   --mark-areas this option will draw the mark areas on the SVG for reference'
     
 
 if __name__ == "__main__":
     inputs = input_class()
     get_args(sys.argv[1:],inputs)
-    #check inputs for errors
-    check_inputs(inputs)
-    #load defaults if inputs not specified
-    load_defaults(inputs)
-    #prepare the STL by moving it to 
-    inputs.inputfile = stl_prep(inputs.inputfile)
+else:
+	#right now this is used for debugging
+	#fix this before release
+	inputs = input_class()
+	inputs.inputfile = 'Ducky.stl'
+	inputs.outputfile = 'Ducky.svg'
+	inputs.thickness = 3.3
+	inputs.t1 = ''
+	inputs.t2 = ''
+	inputs.euler_angle = (0,0,0)
+	inputs.orient = ''
+	inputs.space1 = ''
+	inputs.space2 = ''
+	inputs.count1 = ''
+	inputs.count2 = ''
+	inputs.single = False
+	inputs.double = False
+	inputs.traces = True
+	inputs.verbose = False
+	inputs.mark_areas = False
+    
+#check inputs for errors
+check_inputs(inputs)
+#load defaults if inputs not specified
+load_defaults(inputs)
+#prepare the STL by moving it to 
+inputs.inputfile = stl_prep(inputs.inputfile)
 
-    #after inputs are checked
-    #and defaults are loaded
-    #and stl file is prepped
-    #look to see if this program is being used to make
-    #a figure with single cuts
-    #or one with double cuts
-    #pass the inputs to the correct function
-    #use thickness as a proxy for single cuts
-    if inputs.thickness <> '':
-		stacker(inputs)
-        #create a document to store the data
-		stack_doc = svg_data()
-        #read in the data from the svg file
-		read_svg(inputs.outputfile,stack_doc)
-        #always get traces
-		for i in range(len(stack_doc.layer)-1):
-			get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
-                
-		write_to_inkscape(inputs,stack_doc)
-        
-    else:
-        dicer(inputs)
+#after inputs are checked
+#and defaults are loaded
+#and stl file is prepped
+#look to see if this program is being used to make
+#a figure with single cuts
+#or one with double cuts
+#pass the inputs to the correct function
+#use thickness as a proxy for single cuts
+if inputs.thickness <> '':
+	stacker(inputs)
+	#create a document to store the data
+	stack_doc = svg_data()
+	#read in the data from the svg file
+	read_svg(inputs.outputfile,stack_doc)
+	#always get traces
+	for i in range(len(stack_doc.layer)-1):
+		get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
+		
+	#################################################################
+	#temp check of get mark areas
+	get_mark_areas(stack_doc)
+	################################################################        
+	write_to_inkscape(inputs,stack_doc)
+	
+else:
+	dicer(inputs)
 
-    #at this point, the files are sliced into SVG file(s)
-    #read the SVG file(s) into 
+#at this point, the files are sliced into SVG file(s)
+#read the SVG file(s) into 
