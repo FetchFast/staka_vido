@@ -7,7 +7,7 @@ import getopt
 import string
 from stl_prep import stl_prep
 from stacker import stacker
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import Polygon, LineString, Point
 
 
 ##################################################
@@ -78,6 +78,12 @@ class poly:
         self.trace_count = 0
         self.mark_areas = list()
         self.mark_count = 0
+        #put in a dummy point as a starter
+        self.mark_point = 'dummy'
+        #a poly will only have one mark
+        self.mark=''
+        #but could have multiple cutouts
+        self.cutout=list()
 
     def add_trace(self, geom):
         #this function adds a shapely geometric object
@@ -89,13 +95,19 @@ class poly:
         self.traces.append(geom)
         
     def add_mark_area(self, geom):
-		#this function adds a mark area to a geometric object
-		#to this polygon
-		#each poly may have to many mark areas
-		#this mark area represents the portion of the polygon's trace
-		#that is covered by a polygon's trace on the layer above
-		self.mark_count += 1
-		self.mark_areas.append(geom)
+        #this function adds a mark area to a geometric object
+        #to this polygon
+        #each poly may have to many mark areas
+        #this mark area represents the portion of the polygon's trace
+        #that is covered by a polygon's trace on the layer above
+        self.mark_count += 1
+        self.mark_areas.append(geom)
+        
+    def add_mark(self,point_str):
+        self.mark = point_str
+        
+    def add_cutout(self,point_str):
+        self.cutout.append(point_str)
 
     
 #create a function to extract the size information from the existing file
@@ -166,56 +178,56 @@ def point_str_to_list(point_str):
     return point_list
     
 def get_mark_areas(layer_collection):
-	#this function will go through the layers
-	#it will look at the traces on each layer
-	#and find a place to put the layer number and orientation marker
-	#It is known from previous construction
-	#that the trace polygons are areas on each layer that are covered 
-	#by the layer above
-	#so anything put in that poly will be invisible when fully assembled
-	#but to cut alignment holes in the upper layer
-	#to see the marks in the lower layer
-	#we need to make sure the mark is placed in an area of the lower layer
-	#that corresponds to an area that is covered in the upper layer
-	#in other words, we can't put the marker in an area on the lower layer
-	#that would require cutting a hole in the upper layer
-	#that would be visible after assembly
-	
-	#start by going through the layers
-	for i,curr_layer in enumerate(layer_collection.layer):
-		#then search each polygon in the current layer
-		for curr_poly in curr_layer.poly:
-			#check each trace in this polygon
-			for curr_trace in curr_poly.traces:
-				#if we have a trace in this polygon
-				#we need to cycle through all the traces on the layer above
-				#which means cycle through each polygon
-				#then cycle through its traces
-				for check_poly in layer_collection.layer[i+1].poly:
-					#then search through each trace
-					for check_trace in check_poly.traces:
-						mark_area = curr_trace.intersection(check_trace)
-						if mark_area.type == 'Polygon':
-							#only one overlapping area
-							curr_poly.add_mark_area(mark_area)
-						elif mark_area.type == 'MultiPolygon':
-							#in this case, extract each poly separately
-							for part in mark_area:
-								curr_poly.add_mark_area(mark_area)
-						elif mark_area.type == "GeometryCollection":
-							#if it's a geom collection
-							#and len is zero, no issue
-							if len(mark_area) == 0:
-								pass
-							else:
-								print "Error with mark areas.  Geometry Collection Length non-zero"
-						else:
-							print "Trouble with mark area " + mark_area.type
-			
-			
-		
-	
-	
+    #this function will go through the layers
+    #it will look at the traces on each layer
+    #and find a place to put the layer number and orientation marker
+    #It is known from previous construction
+    #that the trace polygons are areas on each layer that are covered 
+    #by the layer above
+    #so anything put in that poly will be invisible when fully assembled
+    #but to cut alignment holes in the upper layer
+    #to see the marks in the lower layer
+    #we need to make sure the mark is placed in an area of the lower layer
+    #that corresponds to an area that is covered in the upper layer
+    #in other words, we can't put the marker in an area on the lower layer
+    #that would require cutting a hole in the upper layer
+    #that would be visible after assembly
+    
+    #start by going through the layers
+    for i,curr_layer in enumerate(layer_collection.layer):
+        #then search each polygon in the current layer
+        for curr_poly in curr_layer.poly:
+            #check each trace in this polygon
+            for curr_trace in curr_poly.traces:
+                #if we have a trace in this polygon
+                #we need to cycle through all the traces on the layer above
+                #which means cycle through each polygon
+                #then cycle through its traces
+                for check_poly in layer_collection.layer[i+1].poly:
+                    #then search through each trace
+                    for check_trace in check_poly.traces:
+                        mark_area = curr_trace.intersection(check_trace)
+                        if mark_area.type == 'Polygon':
+                            #only one overlapping area
+                            curr_poly.add_mark_area(mark_area)
+                        elif mark_area.type == 'MultiPolygon':
+                            #in this case, extract each poly separately
+                            for part in mark_area:
+                                curr_poly.add_mark_area(mark_area)
+                        elif mark_area.type == "GeometryCollection":
+                            #if it's a geom collection
+                            #and len is zero, no issue
+                            if len(mark_area) == 0:
+                                pass
+                            else:
+                                print "Error with mark areas.  Geometry Collection Length non-zero"
+                        else:
+                            print "Trouble with mark area " + mark_area.type
+            
+            
+        
+    
+    
 def get_traces(layer_above,layer_below):
     #this function takes as an input, two layer objects
     #it will trace the layer above onto the layer below
@@ -240,6 +252,150 @@ def get_traces(layer_above,layer_below):
                         curr_poly.add_trace(part)
                 else:
                     print "Crazy intersection: " + trace_poly.type
+                    
+def draw_mark(lower_poly,upper_poly,test_point,radius):
+    lower_poly.mark_point = test_point
+    upper_poly.mark_point = test_point
+    #get the coordinates for the test point
+    cen_x = test_point.bounds[0]
+    cen_y = test_point.bounds[1]
+    #bottom left corner
+    point_str = str(cen_x-radius/2) + ',' + str(cen_y - radius/2) + ' '
+    #bottm right corner
+    point_str += str(cen_x + radius/2) + ',' + str(cen_y - radius/2) + ' '
+    #upper right corner
+    point_str += str(cen_x + radius/2) + ',' + str(cen_y + radius/2) + ' '
+    #top point
+    point_str += str(cen_x) + ',' + str(cen_y + radius) + ' '
+    #top_left corner
+    point_str += str(cen_x - radius/2) + ',' + str(cen_y + radius/2)
+    lower_poly.add_mark(point_str)
+    upper_poly.add_cutout(point_str)
+    return
+
+    
+def check_point(lower_poly,upper_poly,curr_area,test_point,radius):
+    #pass in the geometry for testing
+    test_circ = test_point.buffer(radius)
+    if curr_area.contains(test_circ):
+        #in this case, the area around the test point large enough to contain the mark
+        #are completely within current mark area
+        
+        #we have to test to make sure that the mark location on this layer
+        #does not overlap the mark on the layer below
+        #when a mark gets set, we'll set the mark point
+        #on the upper layer at the same point
+        #it is initialized as "dummy"
+        #so if it is "dummy", there is no mark below it
+        #if it is a point, that means there is a mark below it
+        #and we need to make sure that the current circle does NOT contain it
+        if lower_poly.mark_point == "dummy":
+            #in this case, nothing further to check
+            #set the upper layer mark point to the current point
+            draw_mark(lower_poly,upper_poly,test_point,radius)
+            #once a success is found, exit the for loop
+            return True
+        else:
+            #in this case, there is a mark in the layer below
+            #if the point is within two radii of the test point
+            #then it's too close
+            check_circ = test_point.buffer(2*radius)
+            if check_circ.contains(lower_poly.mark_point):
+                #in this case, too close do nothing
+                pass
+            else:
+                #in this case, not too close
+                #draw the mark
+                draw_mark(lower_poly,upper_poly,test_point,radius)
+                return True
+    #if all the tests fail, return false, this point won't work
+    return False
+    
+                    
+def add_marker(lower_poly,upper_poly):
+    #this function will take a polygon object, look at its mark_area
+    #and place a pentagonal mark in that area, then a hole in the 
+    #corresponding spot in the polygon above
+    #The program will find a base point for the marker within the mark area
+    #the search pattern will start at the center of the mark area
+    #and check to see if there is a radius from the base point
+    #that is contained within the mark area
+    radius = 2
+    check_area = radius*radius*3.1415
+    
+    for curr_area in lower_poly.mark_areas:
+        #we search through all the mark areas
+        #we don't care which one gets marked for a given poly
+        #only mark one
+        #if any mark has an area less than 4*pi, then there's not enough
+        #area for it to be marked
+        if curr_area.area > check_area:
+            #the search pattern for finding a mark point
+            #start at the centroid
+            #if that fails, search on a circle around the centroid
+            #increment by one degree (or one radius, whichever is smaller)
+            #once the radius exceeds the maximum bounds minus the radius
+            #the loop ends in a failure
+            #the test point will start at the centroid
+            
+            
+            #the first point is the centroid
+            test_point = curr_area.centroid
+            #check the centroid first
+            point_found = check_point(lower_poly,upper_poly,curr_area,test_point,radius)
+            if point_found:
+                #if the centroid works
+                #draw the mark and return true
+                draw_mark(lower_poly,upper_poly,test_point,radius)
+                return True
+            #if it doesn't work start the search radius
+            #start by finding the maximum search radius
+            test_bounds = curr_area.bounds
+            max_bound = 0
+            for bound in test_bounds:
+                if abs(bound) > max_bound:
+                    max_bound = abs(bound)
+            
+            max_bound = max_bound - radius
+            dist = radius
+            #get the coordinates for the centroid (currently test_point)
+            #which will be the center of the search area
+            cen_x = test_point.bounds[0]
+            cen_y = test_point.bounds[1]
+            #while the search radius is less that the maximum
+            while dist < max_bound:
+                del_theta = float(radius)/float(dist)
+                theta = 0
+                while theta < 2*3.1415:
+                    #print dist, theta, del_theta
+                    #search around the circle
+                    test_point = Point(cen_x + dist*math.cos(theta), cen_y + dist*math.sin(theta))
+                    if curr_area.contains(test_point):
+                        #only check points that are within the current mark area
+                        point_found = check_point(lower_poly,upper_poly,curr_area,test_point,radius)
+                    else:
+                        point_found = False
+                    
+                    if point_found:
+                        #if the test point works, mark and return
+                        draw_mark(lower_poly,upper_poly,test_point,radius)
+                        return True
+                    theta += del_theta
+                #if the current circle doesn't work
+                #increment distance by radius and repeat
+                dist += radius
+            
+            #if the while loop exits
+            #it means we've searched the entire space of the current area
+            #and no point worked, that means there are no points on the current
+                
+    #at this point, all areas have been checked
+    #if no possible area can be marked
+    #return false
+    return False
+                    
+            
+        
  
 def read_svg(filepath,svg_data):
     #read in the svg file located at filepath
@@ -330,26 +486,35 @@ def write_to_inkscape(inputs, svg_data):
             outfile.write('    <g\n')
             outfile.write('       id="poly_group' + layer_str + '">\n')
             for poly_num,curr_poly in enumerate(curr_layer.poly):
-				#go through each polygon in the current layer
-				#then write the appropriate info to the output
-				poly_str=str(poly_num)            
-				outfile.write('      <path\n')
-				outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
-				outfile.write('         style=' + curr_poly.style + '/>\n')
-				if inputs.traces:
-					for trace_poly in curr_poly.traces:
-						#include all the traces in the same group
-						outfile.write('      <path\n')
-						outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
-						outfile.write('         style=' + trace_style + '/>\n')
-				if inputs.mark_areas:	
-					for mark_area in curr_poly.mark_areas:
-						#includethe mark areas, too
-						outfile.write('      <path\n')
-						outfile.write('         d="M ' + scale_and_flip(point_list_to_str(mark_area.exterior.coords[:])) + ' Z"\n')
-						outfile.write('         style=' + mark_area_style + '/>\n')
-						
-						
+                #go through each polygon in the current layer
+                #then write the appropriate info to the output
+                poly_str=str(poly_num)            
+                outfile.write('      <path\n')
+                outfile.write('         d="M ' + scale_and_flip(curr_poly.point_str) + ' Z"\n')
+                outfile.write('         style=' + curr_poly.style + '/>\n')
+                if inputs.traces:
+                    for trace_poly in curr_poly.traces:
+                        #include all the traces in the same group
+                        outfile.write('      <path\n')
+                        outfile.write('         d="M ' + scale_and_flip(point_list_to_str(trace_poly.exterior.coords[:])) + ' Z"\n')
+                        outfile.write('         style=' + trace_style + '/>\n')
+                if inputs.mark_areas:   
+                    for mark_area in curr_poly.mark_areas:
+                        #includethe mark areas, too
+                        outfile.write('      <path\n')
+                        outfile.write('         d="M ' + scale_and_flip(point_list_to_str(mark_area.exterior.coords[:])) + ' Z"\n')
+                        outfile.write('         style=' + mark_area_style + '/>\n')
+                        
+                    if curr_poly.mark <> '':
+                        outfile.write('      <path\n')
+                        outfile.write('         d="M ' + scale_and_flip(curr_poly.mark) + ' Z"\n')
+                        outfile.write('         style=' + trace_style + '/>\n')
+                    
+                    for curr_cutout in curr_poly.cutout:
+                        outfile.write('      <path\n')
+                        outfile.write('         d="M ' + scale_and_flip(curr_cutout) + ' Z"\n')
+                        outfile.write('         style=' + cut_style + '/>\n')
+                        
             #after writing all the polygons
             #group close the group around them
             outfile.write('    </g>\n')
@@ -361,36 +526,35 @@ def write_to_inkscape(inputs, svg_data):
         outfile.closed 
              
 def scale_and_flip(point_str):
-	#this function will take a point string
-	#and scale and flip it for inkscape
-	#by default, inkscape assumes units are in pixels
-	#and assumes 90 pixels per inch
-	#slicer outputs units in mm
-	#90 ppi/25.4 mm per inch = 3.54331 scaling
-	#inkscape inverts y coordinates, so we need to flip the y coordinate
-	
-	scale = 3.54331
-	new_point_str = ""
-	while string.find(point_str,",")>=0:
-		#as long as a comma is in the string
-		#we have at least one more pair of coordinates
-		end_position = string.find(point_str,",")
-		new_x = scale*float(point_str[:end_position])
-		point_str = point_str[end_position+1:]
-		#if there is a space in the string, then there are at least two
-		if string.find(point_str," ") >= 0:
-			end_position = string.find(point_str," ")
-			new_y = -scale*float(point_str[:end_position])
-			point_str = point_str[end_position+1:]
-			new_point_str += str(new_x) + "," + str(new_y) + " "
-		else:
-			#this is the last coordinate
-			new_y = -scale * float(point_str)
-			point_str = ""
-			new_point_str += str(new_x) + "," + str(new_y)
-		
-	return new_point_str
-			
+    #this function will take a point string
+    #and scale and flip it for inkscape
+    #by default, inkscape assumes units are in pixels
+    #and assumes 90 pixels per inch
+    #slicer outputs units in mm
+    #90 ppi/25.4 mm per inch = 3.54331 scaling
+    #inkscape inverts y coordinates, so we need to flip the y coordinate
+    scale = 3.54331
+    new_point_str = ""
+    while string.find(point_str,",")>=0:
+        #as long as a comma is in the string
+        #we have at least one more pair of coordinates
+        end_position = string.find(point_str,",")
+        new_x = scale*float(point_str[:end_position])
+        point_str = point_str[end_position+1:]
+        #if there is a space in the string, then there are at least two
+        if string.find(point_str," ") >= 0:
+            end_position = string.find(point_str," ")
+            new_y = -scale*float(point_str[:end_position])
+            point_str = point_str[end_position+1:]
+            new_point_str += str(new_x) + "," + str(new_y) + " "
+        else:
+            #this is the last coordinate
+            new_y = -scale * float(point_str)
+            point_str = ""
+            new_point_str += str(new_x) + "," + str(new_y)
+        
+    return new_point_str
+            
 def get_args(argv,inputs):
     
     try:
@@ -452,7 +616,7 @@ def get_args(argv,inputs):
         elif opt in ("-v", "--verbose"):
             inputs.verbose = True
         elif opt == "--mark-areas":
-			inputs.mark_areas = True
+            inputs.mark_areas = True
         else:
             print "Argument Error"
             
@@ -476,9 +640,9 @@ def check_inputs(inputs):
        inputs.count2 <> '':
         inputs.double = True
     if inputs.single and inputs.double:
-		if inputs.verbose:
-			print "Options for a single cuts and double cuts specified."            
-		sys.exit(2)
+        if inputs.verbose:
+            print "Options for a single cuts and double cuts specified."            
+        sys.exit(2)
     #Specify either spacing, or counts, not both
     have_space = False
     have_count = False
@@ -488,7 +652,7 @@ def check_inputs(inputs):
         have_count = True
     if have_space and have_count:
         if inputs.verbose:
-			print "Options specify spacing and counts.  Only once can be specified."
+            print "Options specify spacing and counts.  Only once can be specified."
         sys.exit(2)
         
 def load_defaults(inputs):
@@ -512,7 +676,7 @@ def load_defaults(inputs):
         inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
         inputs.euler_angle = (0,0,0)
         if inputs.verbose:
-			print "Default settings for single slice set"
+            print "Default settings for single slice set"
     #if t1 is specified, but not t2, assume they are the same
     if inputs.t1 <> '' and inputs.t2 == '':
         inputs.t2 = inputs.t1
@@ -554,29 +718,30 @@ def usage():
     print '   --mark-areas this option will draw the mark areas on the SVG for reference'
     
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
+#    inputs = input_class()
+#    get_args(sys.argv[1:],inputs)
+#else:
+if True:
+    #right now this is used for debugging
+    #fix this before release
     inputs = input_class()
-    get_args(sys.argv[1:],inputs)
-else:
-	#right now this is used for debugging
-	#fix this before release
-	inputs = input_class()
-	inputs.inputfile = 'Ducky.stl'
-	inputs.outputfile = 'Ducky.svg'
-	inputs.thickness = 3.3
-	inputs.t1 = ''
-	inputs.t2 = ''
-	inputs.euler_angle = (0,0,0)
-	inputs.orient = ''
-	inputs.space1 = ''
-	inputs.space2 = ''
-	inputs.count1 = ''
-	inputs.count2 = ''
-	inputs.single = False
-	inputs.double = False
-	inputs.traces = True
-	inputs.verbose = False
-	inputs.mark_areas = False
+    inputs.inputfile = 'Ducky.stl'
+    inputs.outputfile = 'Ducky.svg'
+    inputs.thickness = 3.3
+    inputs.t1 = ''
+    inputs.t2 = ''
+    inputs.euler_angle = (0,0,0)
+    inputs.orient = ''
+    inputs.space1 = ''
+    inputs.space2 = ''
+    inputs.count1 = ''
+    inputs.count2 = ''
+    inputs.single = False
+    inputs.double = False
+    inputs.traces = True
+    inputs.verbose = False
+    inputs.mark_areas = True
     
 #check inputs for errors
 check_inputs(inputs)
@@ -594,23 +759,45 @@ inputs.inputfile = stl_prep(inputs.inputfile)
 #pass the inputs to the correct function
 #use thickness as a proxy for single cuts
 if inputs.thickness <> '':
-	stacker(inputs)
-	#create a document to store the data
-	stack_doc = svg_data()
-	#read in the data from the svg file
-	read_svg(inputs.outputfile,stack_doc)
-	#always get traces
-	for i in range(len(stack_doc.layer)-1):
-		get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
-		
-	#################################################################
-	#temp check of get mark areas
-	get_mark_areas(stack_doc)
-	################################################################        
-	write_to_inkscape(inputs,stack_doc)
-	
+    stacker(inputs)
+    #create a document to store the data
+    stack_doc = svg_data()
+    #read in the data from the svg file
+    read_svg(inputs.outputfile,stack_doc)
+    #always get traces
+    for i in range(len(stack_doc.layer)-1):
+        get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
+        
+    #################################################################
+    #temp check of get mark areas
+    get_mark_areas(stack_doc)
+    ################################################################ 
+    #add the markers
+    for i in range(len(stack_doc.layer)-2):
+        #go through every layer except the last
+        print "\nSearching Layer " + str(i) + "====================="
+        poly_count = 1
+        poly_total = len(stack_doc.layer[i].poly)
+        for lower_poly in stack_doc.layer[i].poly:
+            print "Checking Poly " + str(poly_count) + " of " + str(poly_total)
+            print "Poly has " +str(len(lower_poly.mark_areas)) + " Mark Areas"
+            #then check this poly against all the ones in the layer above
+            #stop looking at this poly when the marker is added
+            marker_added = False
+            for upper_poly in stack_doc.layer[i+1].poly:
+                #if the two intersect, add a marker to the lower layer
+                if lower_poly.shape.intersects(upper_poly.shape):
+                    marker_added = add_marker(lower_poly,upper_poly)
+                    
+                if marker_added:
+                    print "Marker Added \n"
+                    break
+            poly_count+=1
+               
+    write_to_inkscape(inputs,stack_doc)
+    
 else:
-	dicer(inputs)
+    dicer(inputs)
 
 #at this point, the files are sliced into SVG file(s)
 #read the SVG file(s) into 
