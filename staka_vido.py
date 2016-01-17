@@ -5,6 +5,7 @@
 import sys
 import getopt
 import string
+import math
 from stl_prep import stl_prep
 from stacker import stacker
 from shapely.geometry import Polygon, LineString, Point
@@ -34,7 +35,7 @@ class input_class:
         self.single = False
         self.double = False
         self.traces = False
-        self.verbose = False
+        self.verbose = True
         self.mark_areas = False
 
 class svg_data:
@@ -80,9 +81,9 @@ class poly:
         self.mark_count = 0
         #put in a dummy point as a starter
         self.mark_point = 'dummy'
-        #a poly will only have one mark
-        self.mark=''
-        #but could have multiple cutouts
+        #a poly could have many marks if it has multiple polygons above it
+        self.mark=list()
+        #or have mulitple cutouts if it has multiple polygons below it
         self.cutout=list()
 
     def add_trace(self, geom):
@@ -104,7 +105,7 @@ class poly:
         self.mark_areas.append(geom)
         
     def add_mark(self,point_str):
-        self.mark = point_str
+        self.mark.append(point_str)
         
     def add_cutout(self,point_str):
         self.cutout.append(point_str)
@@ -292,7 +293,7 @@ def check_point(lower_poly,upper_poly,curr_area,test_point,radius):
         if lower_poly.mark_point == "dummy":
             #in this case, nothing further to check
             #set the upper layer mark point to the current point
-            draw_mark(lower_poly,upper_poly,test_point,radius)
+            #draw_mark(lower_poly,upper_poly,test_point,radius)
             #once a success is found, exit the for loop
             return True
         else:
@@ -306,7 +307,7 @@ def check_point(lower_poly,upper_poly,curr_area,test_point,radius):
             else:
                 #in this case, not too close
                 #draw the mark
-                draw_mark(lower_poly,upper_poly,test_point,radius)
+                #draw_mark(lower_poly,upper_poly,test_point,radius)
                 return True
     #if all the tests fail, return false, this point won't work
     return False
@@ -322,14 +323,16 @@ def add_marker(lower_poly,upper_poly):
     #that is contained within the mark area
     radius = 2
     check_area = radius*radius*3.1415
-    
     for curr_area in lower_poly.mark_areas:
         #we search through all the mark areas
         #we don't care which one gets marked for a given poly
         #only mark one
+        #the test area will be the intersection between the upper poly
+        #and the mark area of the lower poly
+        test_area = curr_area.intersection(upper_poly.shape)
         #if any mark has an area less than 4*pi, then there's not enough
         #area for it to be marked
-        if curr_area.area > check_area:
+        if test_area.area > check_area:
             #the search pattern for finding a mark point
             #start at the centroid
             #if that fails, search on a circle around the centroid
@@ -350,13 +353,13 @@ def add_marker(lower_poly,upper_poly):
                 return True
             #if it doesn't work start the search radius
             #start by finding the maximum search radius
-            test_bounds = curr_area.bounds
+            test_bounds = test_area.bounds
             max_bound = 0
             for bound in test_bounds:
                 if abs(bound) > max_bound:
                     max_bound = abs(bound)
             
-            max_bound = max_bound - radius
+            max_bound = max_bound - 2*radius
             dist = radius
             #get the coordinates for the centroid (currently test_point)
             #which will be the center of the search area
@@ -400,6 +403,8 @@ def add_marker(lower_poly,upper_poly):
 def read_svg(filepath,svg_data):
     #read in the svg file located at filepath
     #store the data into the structure
+    if inputs.verbose:
+		print "Reading SVG"
     with open(filepath,'r') as infile:
         for line in infile:
             if line.find('<svg')>=0:
@@ -505,9 +510,9 @@ def write_to_inkscape(inputs, svg_data):
                         outfile.write('         d="M ' + scale_and_flip(point_list_to_str(mark_area.exterior.coords[:])) + ' Z"\n')
                         outfile.write('         style=' + mark_area_style + '/>\n')
                         
-                    if curr_poly.mark <> '':
+                    for curr_mark in curr_poly.mark:
                         outfile.write('      <path\n')
-                        outfile.write('         d="M ' + scale_and_flip(curr_poly.mark) + ' Z"\n')
+                        outfile.write('         d="M ' + scale_and_flip(curr_mark) + ' Z"\n')
                         outfile.write('         style=' + trace_style + '/>\n')
                     
                     for curr_cutout in curr_poly.cutout:
@@ -726,8 +731,8 @@ if True:
     #right now this is used for debugging
     #fix this before release
     inputs = input_class()
-    inputs.inputfile = 'Ducky.stl'
-    inputs.outputfile = 'Ducky.svg'
+    inputs.inputfile = 'mark_test.stl'
+    inputs.outputfile = 'mark_test.svg'
     inputs.thickness = 3.3
     inputs.t1 = ''
     inputs.t2 = ''
@@ -740,14 +745,21 @@ if True:
     inputs.single = False
     inputs.double = False
     inputs.traces = True
-    inputs.verbose = False
+    inputs.verbose = True
     inputs.mark_areas = True
     
 #check inputs for errors
+if inputs.verbose:
+    print "Checking inputs"
+    
 check_inputs(inputs)
 #load defaults if inputs not specified
+if inputs.verbose:
+    print "Checking for default values"
 load_defaults(inputs)
 #prepare the STL by moving it to 
+if inputs.verbose:
+    print "Preparing input STL file"
 inputs.inputfile = stl_prep(inputs.inputfile)
 
 #after inputs are checked
@@ -759,6 +771,8 @@ inputs.inputfile = stl_prep(inputs.inputfile)
 #pass the inputs to the correct function
 #use thickness as a proxy for single cuts
 if inputs.thickness <> '':
+    if inputs.verbose:
+        print "Calling stacker"
     stacker(inputs)
     #create a document to store the data
     stack_doc = svg_data()
@@ -767,33 +781,53 @@ if inputs.thickness <> '':
     #always get traces
     for i in range(len(stack_doc.layer)-1):
         get_traces(stack_doc.layer[i+1],stack_doc.layer[i])
-        
-    #################################################################
-    #temp check of get mark areas
+    #Mark areas are areas on a polygon that is covered by a polygon
+    #that is in turn covered by another polygon
+    #in other words, a place on a polygon that has at least two layers
+    #above it
+    #used in determining where to place any orientation marks
     get_mark_areas(stack_doc)
-    ################################################################ 
+    #search through the polygons to find where to place the markers 
     #add the markers
     for i in range(len(stack_doc.layer)-2):
-        #go through every layer except the last
-        print "\nSearching Layer " + str(i) + "====================="
+        #go through every layer except the last two
+        if inputs.verbose:
+			print "\nSearching Layer " + str(i) + "====================="
         poly_count = 1
-        poly_total = len(stack_doc.layer[i].poly)
-        for lower_poly in stack_doc.layer[i].poly:
-            print "Checking Poly " + str(poly_count) + " of " + str(poly_total)
-            print "Poly has " +str(len(lower_poly.mark_areas)) + " Mark Areas"
-            #then check this poly against all the ones in the layer above
-            #stop looking at this poly when the marker is added
+        poly_total = len(stack_doc.layer[i+1].poly)
+        for upper_poly in stack_doc.layer[i+1].poly:
+            #check each polygon in the upper layer
+            #set a boolean bit to see if the marker is found
             marker_added = False
-            for upper_poly in stack_doc.layer[i+1].poly:
-                #if the two intersect, add a marker to the lower layer
-                if lower_poly.shape.intersects(upper_poly.shape):
-                    marker_added = add_marker(lower_poly,upper_poly)
+            if inputs.verbose:
+				print "Checking Poly " + str(poly_count) + " of " + str(poly_total)
+            #check to see if this polygon intersects with the mark area
+            #of any polygon on the lower layer
+            for lower_poly in stack_doc.layer[i].poly:
+                #a polygon may have one or more mark areas
+                for curr_mark_area in lower_poly.mark_areas:
+                    if curr_mark_area.intersects(upper_poly.shape):
+                        #if the upper poly intersects the lower poly's
+                        #mark area, then try to add a marker
+                        #if it returns true, the marker is added
+                        #if it returns false, no marker added
+                        marker_added = add_marker(lower_poly,upper_poly)
+                    
+                    if marker_added:
+                        #in this case, a marker has been added to this
+                        #upper polygon
+                        #do not search more mark areas
+                        if inputs.verbose:
+							print "Marker added\n"
+                        break
                     
                 if marker_added:
-                    print "Marker Added \n"
+                    #in this case, marker has been added to upper poly
+                    #do not search more lower polys
                     break
+                    
             poly_count+=1
-               
+                                   
     write_to_inkscape(inputs,stack_doc)
     
 else:

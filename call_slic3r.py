@@ -46,23 +46,28 @@ def call_slic3r(inputs):
     slic3r_command = list()
     if string.find(test_plat,"Windows")>=0:
         #in this case, found windows
+        if inputs.verbose:
+            print "Calling Slic3r via 'slic3r-console'"
         slic3r_command.append('slic3r-console')
     elif string.find(test_plat,"Linux")>=0:
         #in this case, found windows
+        if inputs.verbose:
+			print "Calling Slic3r via 'slic3r'"
         slic3r_command.append('slic3r')    
-        
-	for opt in options:
-		slic3r_command.append(opt)
+    else:
+        print "Platform not implemented."
+        sys.exit()    
     
-            
-	if inputs.verbose:
-		for command in slic3r_command:
-			print command
-	subprocess.call(slic3r_command)
+    
+    for opt in options:
+        slic3r_command.append(opt)
+               
+    if inputs.verbose:
+        for command in slic3r_command:
+            print command
+    subprocess.call(slic3r_command)
 
  
 
-    else:
-        print "Platform not implemented."
-        sys.exit()
+    
         
