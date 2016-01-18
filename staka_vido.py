@@ -9,6 +9,7 @@ import math
 from stl_prep import stl_prep
 from stacker import stacker
 from shapely.geometry import Polygon, LineString, Point
+from hersheydata import font_data
 
 
 ##################################################
@@ -404,7 +405,7 @@ def read_svg(filepath,svg_data):
     #read in the svg file located at filepath
     #store the data into the structure
     if inputs.verbose:
-		print "Reading SVG"
+        print "Reading SVG"
     with open(filepath,'r') as infile:
         for line in infile:
             if line.find('<svg')>=0:
@@ -439,6 +440,72 @@ def read_svg(filepath,svg_data):
                 svg_data.add_layer(new_layer)
 
         infile.closed
+
+def add_marker_text_inkscape(text_str,test_point):
+    #this function will add marker text centered on the test_point
+    #the font data is too large to use as-is
+    #set a constant scaling factor here
+    text_scale =0.25
+    #set the spacing between characters (pixels, relative to the original font size)
+    spacing = 3
+    #inkscape scaling factor
+    #90 ppi/25.4 mm per inch = 3.54331 scaling
+    #inkscape inverts y coordinates, so we need to flip the y coordinate
+    inkscape_scale = 3.54331
+    
+    #first, find the total width of the string
+    #and build a list of offsets relative to the left edge of the text
+    width=0
+    offset = list()
+    #add up the width of all the characters
+    for i,q in enumerate(text_str):
+        char_data = font_data[ord(q)-32]
+        curr_width= int(char_data.split()[0])
+        width += curr_width
+        if i == 0:
+            #offset for the first character is one half the width of
+            #that character
+            offset.append(curr_width/2)
+        else:
+            #offset for every other character is one half the width of
+            #the current character, plus one half the width of the last
+            #plus the width of the spacing
+            offset.append(curr_width/2+last_width/2+spacing)
+        #take the current width and set it to the last_width
+        last_width=curr_width
+    #add width for the spaces between characters
+    #n-1 spaces for n characters
+    width+=spacing*(len(text_str)-1)
+    #get the point data to locate the text
+    #the location of the center point needs to be flipped about the y axis
+    #and scaled for inkscape
+    cen_x = inkscape_scale*test_point.bounds[0]
+    cen_y = -inkscape_scale*test_point.bounds[1]
+    #each character should be drawn at a position that starts at the cen_x
+    #moves to the left by width/2 to reach the start position
+    #then moves to the right by its corresponding offset to be spaced correctly
+    #the tricky bit is that the cen_x and cen_y coordinates must be scaled and flipped
+    #but the data for the font itself shouldn't be, and should remain true to scale only
+    
+    #create an output string that represents the text to be added to the inkscape svg
+    outstring = ""
+    for i,q in enumerate(text_str):
+        char_data=font_data[ord(q)-32]
+        start_pos = char_data.find("M")
+        #need to scale the character data
+        scaled_data = char_data[start_pos:]
+        scaled_data = scaled_data.split()
+        for j,item in enumerate(scaled_data):
+            if item <> "M" and item <> "L":
+                scaled_data[j] = str(text_scale*float(item))
+                
+        scaled_data = " ".join(scaled_data)
+        outstring +='      <path\n'
+        outstring +='         transform="translate(' + str(cen_x+text_scale*(-width/2+offset[i]))+','+str(cen_y)+')"\n'
+        outstring +='         d="' + scaled_data + '"\n'
+        outstring +='         style=' + trace_style + '/>\n'
+        
+    return outstring
         
 def write_to_inkscape(inputs, svg_data):
     with open(inputs.outputfile, 'w') as outfile:
@@ -519,6 +586,8 @@ def write_to_inkscape(inputs, svg_data):
                         outfile.write('      <path\n')
                         outfile.write('         d="M ' + scale_and_flip(curr_cutout) + ' Z"\n')
                         outfile.write('         style=' + cut_style + '/>\n')
+                    if curr_poly.mark_point <> "dummy":    
+                        outfile.write(add_marker_text_inkscape(layer_str,curr_poly.mark_point))
                         
             #after writing all the polygons
             #group close the group around them
@@ -731,8 +800,8 @@ if True:
     #right now this is used for debugging
     #fix this before release
     inputs = input_class()
-    inputs.inputfile = 'mark_test.stl'
-    inputs.outputfile = 'mark_test.svg'
+    inputs.inputfile = 'yodabust.stl'
+    inputs.outputfile = 'yodabust.svg'
     inputs.thickness = 3.3
     inputs.t1 = ''
     inputs.t2 = ''
@@ -792,7 +861,7 @@ if inputs.thickness <> '':
     for i in range(len(stack_doc.layer)-2):
         #go through every layer except the last two
         if inputs.verbose:
-			print "\nSearching Layer " + str(i) + "====================="
+            print "\nSearching Layer " + str(i) + "====================="
         poly_count = 1
         poly_total = len(stack_doc.layer[i+1].poly)
         for upper_poly in stack_doc.layer[i+1].poly:
@@ -800,7 +869,7 @@ if inputs.thickness <> '':
             #set a boolean bit to see if the marker is found
             marker_added = False
             if inputs.verbose:
-				print "Checking Poly " + str(poly_count) + " of " + str(poly_total)
+                print "Checking Poly " + str(poly_count) + " of " + str(poly_total)
             #check to see if this polygon intersects with the mark area
             #of any polygon on the lower layer
             for lower_poly in stack_doc.layer[i].poly:
@@ -818,7 +887,7 @@ if inputs.thickness <> '':
                         #upper polygon
                         #do not search more mark areas
                         if inputs.verbose:
-							print "Marker added\n"
+                            print "Marker added\n"
                         break
                     
                 if marker_added:
