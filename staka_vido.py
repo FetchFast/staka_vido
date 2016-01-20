@@ -38,6 +38,7 @@ class input_class:
         self.traces = False
         self.verbose = True
         self.mark_areas = False
+        self.openscad = False
 
 class svg_data:
     #this class holds all the information for an SVG document
@@ -215,7 +216,8 @@ def get_mark_areas(layer_collection):
                         elif mark_area.type == 'MultiPolygon':
                             #in this case, extract each poly separately
                             for part in mark_area:
-                                curr_poly.add_mark_area(mark_area)
+                                curr_poly.add_mark_area(part)
+                            
                         elif mark_area.type == "GeometryCollection":
                             #if it's a geom collection
                             #and len is zero, no issue
@@ -225,10 +227,6 @@ def get_mark_areas(layer_collection):
                                 print "Error with mark areas.  Geometry Collection Length non-zero"
                         else:
                             print "Trouble with mark area " + mark_area.type
-            
-            
-        
-    
     
 def get_traces(layer_above,layer_below):
     #this function takes as an input, two layer objects
@@ -628,7 +626,40 @@ def scale_and_flip(point_str):
             new_point_str += str(new_x) + "," + str(new_y)
         
     return new_point_str
+    
+def write_to_openscad(inputs,svg_data):
+    #this function will write the output of the slices to OpenSCAD
+    #to allow previewing what the finished shape will look like.
+    #Go through each layer in the SVG data
+    #draw each polygon from from the layer
+    #extrude it by the thickness
+    #translate it to the correct height
+    outname = inputs.outputfile[:-4] + ".scad"
+    print outname
+    with open(outname,'w') as outfile:
+        for i,curr_layer in enumerate(svg_data.layer): 
+            for curr_poly in curr_layer.poly:
+                trans_string = "translate([0,0," + str(i*inputs.thickness) + "])\n"
+                trans_string += "linear_extrude(height=" + str(inputs.thickness) + ")\n"
+                polygon_string = poly_to_openscad(curr_poly.shape)
+                outfile.write(trans_string)
+                outfile.write(polygon_string)
+                outfile.write("\n")
+                
             
+def poly_to_openscad(shape):
+    #take a shapely polygon object
+    #and read its exterior coordinates
+    #return a formatted string that will contain#
+    #the OpenSCAD commands to make the equivalent poly
+    polygon_string = "polygon(points=["
+    for point in shape.exterior.coords:
+        polygon_string += '[' + str(point[0]) + ',' + str(point[1]) + '],'
+    #after all the points are added, remove the last comma
+    polygon_string = polygon_string[:-1]
+    polygon_string += ']);\n'
+    return polygon_string
+    
 def get_args(argv,inputs):
     
     try:
@@ -643,7 +674,9 @@ def get_args(argv,inputs):
                                    "n1=",
                                    "n2=",
                                    "add-traces",
-                                   "verbose" ])
+                                   "verbose"
+                                   "mark-areas",
+                                   "openscad" ])
     except getopt.GetoptError:
         usage()      
         sys.exit(2)
@@ -691,6 +724,8 @@ def get_args(argv,inputs):
             inputs.verbose = True
         elif opt == "--mark-areas":
             inputs.mark_areas = True
+        elif opt == "--openscad":
+            inputs.openscad = True
         else:
             print "Argument Error"
             
@@ -790,6 +825,7 @@ def usage():
     print '   --add-traces this option will enable adding traces to layers'
     print '   --verbose this option will enable additional output text'
     print '   --mark-areas this option will draw the mark areas on the SVG for reference'
+    print '   --openscad this option will output the geometry into OpenSCAD format for 3D viewing'
     
 
 #if __name__ == "__main__":
@@ -805,7 +841,7 @@ if True:
     inputs.thickness = 3.3
     inputs.t1 = ''
     inputs.t2 = ''
-    inputs.euler_angle = (0,0,0)
+    inputs.euler_angle = (0,45,0)
     inputs.orient = ''
     inputs.space1 = ''
     inputs.space2 = ''
@@ -816,6 +852,7 @@ if True:
     inputs.traces = True
     inputs.verbose = True
     inputs.mark_areas = True
+    inputs.openscad = True
     
 #check inputs for errors
 if inputs.verbose:
@@ -898,7 +935,10 @@ if inputs.thickness <> '':
             poly_count+=1
                                    
     write_to_inkscape(inputs,stack_doc)
-    
+    if inputs.openscad:
+        if inputs.verbose:
+            print "Writing OpenSCAD output"
+        write_to_openscad(inputs,stack_doc)
 else:
     dicer(inputs)
 
