@@ -33,8 +33,7 @@ class input_class:
         self.space2 = ''
         self.count1 = ''
         self.count2 = ''
-        self.single = False
-        self.double = False
+        self.single = True
         self.traces = False
         self.verbose = True
         self.mark_areas = False
@@ -396,9 +395,6 @@ def add_marker(lower_poly,upper_poly):
     #return false
     return False
                     
-            
-        
- 
 def read_svg(filepath,svg_data):
     #read in the svg file located at filepath
     #store the data into the structure
@@ -676,7 +672,8 @@ def get_args(argv,inputs):
                                    "add-traces",
                                    "verbose"
                                    "mark-areas",
-                                   "openscad" ])
+                                   "openscad",
+                                   "double" ])
     except getopt.GetoptError:
         usage()      
         sys.exit(2)
@@ -726,8 +723,11 @@ def get_args(argv,inputs):
             inputs.mark_areas = True
         elif opt == "--openscad":
             inputs.openscad = True
+        elif opt == "--double":
+			inputs.single = False
         else:
             print "Argument Error"
+            sys.exit(2)
             
         
         
@@ -737,21 +737,21 @@ def check_inputs(inputs):
         print "No input STL file specified."
         sys.exit(2)
     #if there are inputs for single slices and double slices
-    #then error, because it should be one or the other
-    if inputs.thickness <> '' or inputs.euler_angle <> '':
-        inputs.single = True
-    if inputs.t1 <> '' or \
-       inputs.t2 <> '' or \
-       inputs.orient <> '' or \
-       inputs.space1 <> '' or \
-       inputs.space2 <> '' or \
-       inputs.count1 <> '' or \
-       inputs.count2 <> '':
-        inputs.double = True
-    if inputs.single and inputs.double:
-        if inputs.verbose:
-            print "Options for a single cuts and double cuts specified."            
-        sys.exit(2)
+    #alert user to the mode, and tell them to double check settings 
+    if inputs.single:
+		if inputs.t1 <> '' or \
+		   inputs.t2 <> '' or \
+		   inptus.orient <> '' or \
+		   inputs.space1 <> '' or \
+		   inputs.space2 <> '' or \
+		   inputs.count1 <> '' or \
+		   inputs.count2 <> '':
+		    #in this case, the mode is to single slice
+		    #but options for double slicing specified
+		    #and will be ignored
+		    print "Single slicing mode enabled, but options for double slicing " +
+		          "are specified.  These options ignored unless the '--double' option is used."
+		    
     #Specify either spacing, or counts, not both
     have_space = False
     have_count = False
@@ -761,7 +761,7 @@ def check_inputs(inputs):
         have_count = True
     if have_space and have_count:
         if inputs.verbose:
-            print "Options specify spacing and counts.  Only once can be specified."
+            print "Options specify spacing and counts.  Only one can be specified."
         sys.exit(2)
         
 def load_defaults(inputs):
@@ -771,29 +771,26 @@ def load_defaults(inputs):
         end_position = string.find(inputs.inputfile,'.')
         filename = inputs.inputfile[:end_position]
         inputs.outputfile = filename + '.svg'
-    #if no values are added
-    #assume single cut, in existing z axis
-    if inputs.thickness == '' and \
-       inputs.t1 == '' and \
-       inputs.t2 == '' and \
-       inputs.euler_angle == '' and \
-       inputs.orient == '' and \
-       inputs.space1 == '' and \
-       inputs.space2 == '' and \
-       inputs.count1 == '' and \
-       inputs.count2 == '':
-        inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
-        inputs.euler_angle = (0,0,0)
+    #if single mode and no thickness added, load default
+    if inputs.thickness == '' and inputs.single:
+	    inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
+	    if inputs.verbose:
+			print "Default thickness of 3.3 mm used"
+	#if single mode and no angle specified, load rotations of 0
+	if inputs.euler_angle == '' and inputs.single:
+        inputs.euler_angle = (0,0,0) #default is no rotation
         if inputs.verbose:
-            print "Default settings for single slice set"
+            print "Default rotation used"
     #if t1 is specified, but not t2, assume they are the same
     if inputs.t1 <> '' and inputs.t2 == '':
         inputs.t2 = inputs.t1
-    
-       
-    #add more default behaviors here
-        
-    
+    #if double mode and no thicknesses specified, use 3.3 mm
+    if not inputs.single and inputs.t1 == '':
+		inputs.t1 = 3.3
+		inputs.t2 = 3.3
+    #If double mode and no orientation specified, use 0
+    if not inputs.single and inputs.orient == '':
+		inputs.orient = 0
         
 def extract_angles(input_string):
     end_position = string.find(input_string,',')
@@ -811,21 +808,22 @@ def usage():
     print 'staka_vido.py\n'
     print '   -i, --ifile input STL file'
     print '   -o, --ofile output SVG file'
-    print '   -t specify the thickness the material in mm'
-    print '   --t1 if using two materials for opposite directions,' \
+    print '   -t, specify the thickness the material in mm'
+    print '   --double, switch to indicate double slicing mode'
+    print '   --t1, if using two materials for opposite directions,' \
           ' specify the thickness of the first material'
-    print '   --t2 if using two materials for opposite directions,' \
+    print '   --t2, if using two materials for opposite directions,' \
           ' specify the thickness of the second material'
-    print '   -r specify the euler angle rotation z-x-z (extrinsic) used for rotating the STL'
+    print '   -r, specify the euler angle rotation z-x-z (extrinsic) used for rotating the STL'
     print '   --orient specify the angle in degrees for the orientation of the second slices'
-    print '   --s1 specify the spacing between the centers of the cuts for the first axis'
-    print '   --s2 specify the spacing between the centers of the cuts for the second axis'
-    print '   --n1 specify the number of layers for the first axis'
-    print '   --n2 specify the number of layers for the second axis'
-    print '   --add-traces this option will enable adding traces to layers'
-    print '   --verbose this option will enable additional output text'
-    print '   --mark-areas this option will draw the mark areas on the SVG for reference'
-    print '   --openscad this option will output the geometry into OpenSCAD format for 3D viewing'
+    print '   --s1, specify the spacing between the centers of the cuts for the first axis'
+    print '   --s2, specify the spacing between the centers of the cuts for the second axis'
+    print '   --n1, specify the number of layers for the first axis'
+    print '   --n2, specify the number of layers for the second axis'
+    print '   --add-traces, this option will enable adding traces to layers'
+    print '   --verbose, this option will enable additional output text'
+    print '   --mark-areas, this option will draw the mark areas on the SVG for reference'
+    print '   --openscad, this option will output the geometry into OpenSCAD format for 3D viewing'
     
 
 #if __name__ == "__main__":
@@ -847,8 +845,7 @@ if True:
     inputs.space2 = ''
     inputs.count1 = ''
     inputs.count2 = ''
-    inputs.single = False
-    inputs.double = False
+    inputs.single = True
     inputs.traces = True
     inputs.verbose = True
     inputs.mark_areas = True
@@ -857,7 +854,6 @@ if True:
 #check inputs for errors
 if inputs.verbose:
     print "Checking inputs"
-    
 check_inputs(inputs)
 #load defaults if inputs not specified
 if inputs.verbose:
@@ -875,10 +871,9 @@ inputs.inputfile = stl_prep(inputs.inputfile)
 #a figure with single cuts
 #or one with double cuts
 #pass the inputs to the correct function
-#use thickness as a proxy for single cuts
-if inputs.thickness <> '':
+if inputs.single:
     if inputs.verbose:
-        print "Calling stacker"
+        print "Single slice mode entered"
     stacker(inputs)
     #create a document to store the data
     stack_doc = svg_data()
@@ -940,6 +935,8 @@ if inputs.thickness <> '':
             print "Writing OpenSCAD output"
         write_to_openscad(inputs,stack_doc)
 else:
+	if inputs.verbose:
+		print "Double slice mode entered"
     dicer(inputs)
 
 #at this point, the files are sliced into SVG file(s)
