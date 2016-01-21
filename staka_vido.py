@@ -10,6 +10,8 @@ from stl_prep import stl_prep
 from stacker import stacker
 from shapely.geometry import Polygon, LineString, Point
 from hersheydata import font_data
+from rotate_stl import rotate_stl
+from call_slic3r import call_slic3r
 
 
 ##################################################
@@ -724,7 +726,7 @@ def get_args(argv,inputs):
         elif opt == "--openscad":
             inputs.openscad = True
         elif opt == "--double":
-			inputs.single = False
+            inputs.single = False
         else:
             print "Argument Error"
             sys.exit(2)
@@ -739,19 +741,19 @@ def check_inputs(inputs):
     #if there are inputs for single slices and double slices
     #alert user to the mode, and tell them to double check settings 
     if inputs.single:
-		if inputs.t1 <> '' or \
-		   inputs.t2 <> '' or \
-		   inptus.orient <> '' or \
-		   inputs.space1 <> '' or \
-		   inputs.space2 <> '' or \
-		   inputs.count1 <> '' or \
-		   inputs.count2 <> '':
-		    #in this case, the mode is to single slice
-		    #but options for double slicing specified
-		    #and will be ignored
-		    print "Single slicing mode enabled, but options for double slicing " +
-		          "are specified.  These options ignored unless the '--double' option is used."
-		    
+        if inputs.t1 <> '' or \
+           inputs.t2 <> '' or \
+           inputs.orient <> '' or \
+           inputs.space1 <> '' or \
+           inputs.space2 <> '' or \
+           inputs.count1 <> '' or \
+           inputs.count2 <> '':
+            #in this case, the mode is to single slice
+            #but options for double slicing specified
+            #and will be ignored
+            print "Single slicing mode enabled, but options for double slicing " \
+                  "are specified.  These options ignored unless the '--double' option is used."
+            
     #Specify either spacing, or counts, not both
     have_space = False
     have_count = False
@@ -773,11 +775,11 @@ def load_defaults(inputs):
         inputs.outputfile = filename + '.svg'
     #if single mode and no thickness added, load default
     if inputs.thickness == '' and inputs.single:
-	    inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
-	    if inputs.verbose:
-			print "Default thickness of 3.3 mm used"
-	#if single mode and no angle specified, load rotations of 0
-	if inputs.euler_angle == '' and inputs.single:
+        inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
+        if inputs.verbose:
+            print "Default thickness of 3.3 mm used"
+    #if single mode and no angle specified, load rotations of 0
+    if inputs.euler_angle == '' and inputs.single:
         inputs.euler_angle = (0,0,0) #default is no rotation
         if inputs.verbose:
             print "Default rotation used"
@@ -786,11 +788,11 @@ def load_defaults(inputs):
         inputs.t2 = inputs.t1
     #if double mode and no thicknesses specified, use 3.3 mm
     if not inputs.single and inputs.t1 == '':
-		inputs.t1 = 3.3
-		inputs.t2 = 3.3
+        inputs.t1 = 3.3
+        inputs.t2 = 3.3
     #If double mode and no orientation specified, use 0
     if not inputs.single and inputs.orient == '':
-		inputs.orient = 0
+        inputs.orient = 0
         
 def extract_angles(input_string):
     end_position = string.find(input_string,',')
@@ -874,7 +876,13 @@ inputs.inputfile = stl_prep(inputs.inputfile)
 if inputs.single:
     if inputs.verbose:
         print "Single slice mode entered"
-    stacker(inputs)
+    #take the input file and rotate it according to
+    #input.euler_angle
+    rotate_stl(inputs)
+    #pass the rotated STL to slic3r
+    call_slic3r(inputs)
+    #the result is an SVG file saved to inputs.outputfile
+    
     #create a document to store the data
     stack_doc = svg_data()
     #read in the data from the svg file
@@ -935,8 +943,8 @@ if inputs.single:
             print "Writing OpenSCAD output"
         write_to_openscad(inputs,stack_doc)
 else:
-	if inputs.verbose:
-		print "Double slice mode entered"
+    if inputs.verbose:
+        print "Double slice mode entered"
     dicer(inputs)
 
 #at this point, the files are sliced into SVG file(s)
