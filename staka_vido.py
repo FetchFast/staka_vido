@@ -7,10 +7,9 @@ import getopt
 import string
 import math
 from stl_prep import stl_prep
-from stacker import stacker
 from shapely.geometry import Polygon, LineString, Point
 from hersheydata import font_data
-from rotate_stl import rotate_stl
+from rotate_stl import rotate_stl, orient_stl
 from call_slic3r import call_slic3r
 
 
@@ -40,6 +39,8 @@ class input_class:
         self.verbose = True
         self.mark_areas = False
         self.openscad = False
+        #define a default thickness
+        self.def_thickness = 3.3 #mm
 
 class svg_data:
     #this class holds all the information for an SVG document
@@ -765,6 +766,7 @@ def check_inputs(inputs):
         if inputs.verbose:
             print "Options specify spacing and counts.  Only one can be specified."
         sys.exit(2)
+		
         
 def load_defaults(inputs):
     #if no output file is specified
@@ -775,7 +777,7 @@ def load_defaults(inputs):
         inputs.outputfile = filename + '.svg'
     #if single mode and no thickness added, load default
     if inputs.thickness == '' and inputs.single:
-        inputs.thickness = 3.3 #mm default thickness is 1/8" plywood
+        inputs.thickness = inputs.def_thickness
         if inputs.verbose:
             print "Default thickness of 3.3 mm used"
     #if single mode and no angle specified, load rotations of 0
@@ -788,8 +790,8 @@ def load_defaults(inputs):
         inputs.t2 = inputs.t1
     #if double mode and no thicknesses specified, use 3.3 mm
     if not inputs.single and inputs.t1 == '':
-        inputs.t1 = 3.3
-        inputs.t2 = 3.3
+        inputs.t1 = inputs.def_thickness
+        inputs.t2 = inputs.def_thickness
     #If double mode and no orientation specified, use 0
     if not inputs.single and inputs.orient == '':
         inputs.orient = 0
@@ -945,7 +947,25 @@ if inputs.single:
 else:
     if inputs.verbose:
         print "Double slice mode entered"
-    dicer(inputs)
+    #Rotate the STL file into position
+    rotate_stl(inputs)
+    #pass the rotated STL to slic3r
+    call_slic3r(inputs)
+    #the result is an SVG file saved to inputs.outputfile
+    #create a document to store the data from the first slice
+    first_slice = svg_data()
+    #read in the data from the svg file
+    read_svg(inputs.outputfile,first_slice)
+    #then orient the STL file for the second slice
+    orient_stl(inputs)
+    #pass the rotated STL to slic3r again
+    call_slic3r(inputs)
+    #create a document to store the data from the second slice
+    second_slice = svg_data()
+    #read in the data from the SVG file
+    read_svg(inputs.outputfile,second_slice)
+    #at this point, all the data is in the two files
+    
 
 #at this point, the files are sliced into SVG file(s)
 #read the SVG file(s) into 
