@@ -406,8 +406,8 @@ def read_svg(filepath,svg_data):
     with open(filepath,'r') as infile:
         for line in infile:
             if line.find('<svg')>=0:
-                extract_size(line,svg_data)
-
+                #extract_size(line,svg_data)
+                pass
             elif line.find('<g id="layer')>=0:
                 #in this case, we are indicating a new layer
                 #then create a layer that inkscape will recognize
@@ -505,6 +505,7 @@ def add_marker_text_inkscape(text_str,test_point):
     return outstring
         
 def write_to_inkscape(inputs, svg_data):
+    scale = 3.54331
     with open(inputs.outputfile, 'w') as outfile:
         #writout out the header info
         outfile.write('<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n')
@@ -516,8 +517,8 @@ def write_to_inkscape(inputs, svg_data):
                       '   xmlns="http://www.w3.org/2000/svg"\n' + \
                       '   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"\n' + \
                       '   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n' + \
-                      '   width="' + svg_data.width + '"\n' + \
-                      '   height="' + svg_data.height + '"\n' + \
+                      '   width="' + str(scale *svg_data.width) + '"\n' + \
+                      '   height="' + str(scale*svg_data.height) + '"\n' + \
                       '   id="' + inputs.outputfile + '"\n' + \
                       '   version="1.1"\n' + \
                       '   inkscape:version="0.91 r13725"\n' + \
@@ -769,35 +770,35 @@ def check_inputs(inputs):
     
     #if using spacing, check to make sure the spacing is at least twice the material thickness
     if have_space:
-		if inputs.t1 <> '':
-			#if thickness is specified, check against what is input
-			if inputs.space1 < 2*inputs.t1:
-				print "First spacing is less than twice the material thickness. " \
-				      "Please correct and try again."
-				sys.exit(2)
-			#if the second thickness is specified, check against input
-			if inputs.t2 <> '':
-				if inputs.space2 < 2*inputs.t2:
-					print "Second spacing is less than twice the material thickness. " \
-					      "Please correct and try again."
-					sys.exit(2)
-			#if t2 is not specified, check second spacing against t1
-			else:
-				if inputs.space2 < 2*inputs.t1:
-					print "Second spacing is less than twice the material thickness. " \
-					      "Please correct and try again."
-					sys.exit(2)
-		else:
-			#if first thickness not specified, check both spacings against default
-			if inputs.space1 < 2*inputs.def_thickness:
-				print "First spacing is less than twice the material thickness. " \
-				      "Please correct and try again."
-				sys.exit(2)
-			if inputs.space2 < 2* inputs.def_thickness:
-				print "Second spacing is less than twice the material thickness. " \
-					  "Please correct and try again."
-		        sys.exit(2)
-		
+        if inputs.t1 <> '':
+            #if thickness is specified, check against what is input
+            if inputs.space1 < 2*inputs.t1:
+                print "First spacing is less than twice the material thickness. " \
+                      "Please correct and try again."
+                sys.exit(2)
+            #if the second thickness is specified, check against input
+            if inputs.t2 <> '':
+                if inputs.space2 < 2*inputs.t2:
+                    print "Second spacing is less than twice the material thickness. " \
+                          "Please correct and try again."
+                    sys.exit(2)
+            #if t2 is not specified, check second spacing against t1
+            else:
+                if inputs.space2 < 2*inputs.t1:
+                    print "Second spacing is less than twice the material thickness. " \
+                          "Please correct and try again."
+                    sys.exit(2)
+        else:
+            #if first thickness not specified, check both spacings against default
+            if inputs.space1 < 2*inputs.def_thickness:
+                print "First spacing is less than twice the material thickness. " \
+                      "Please correct and try again."
+                sys.exit(2)
+            if inputs.space2 < 2* inputs.def_thickness:
+                print "Second spacing is less than twice the material thickness. " \
+                      "Please correct and try again."
+                sys.exit(2)
+        
         
 def load_defaults(inputs):
     #if no output file is specified
@@ -869,8 +870,8 @@ if True:
     #right now this is used for debugging
     #fix this before release
     inputs = input_class()
-    inputs.inputfile = 'yodabust.stl'
-    inputs.outputfile = 'yodabust.svg'
+    inputs.inputfile = 'Ducky.stl'
+    inputs.outputfile = 'Ducky.svg'
     inputs.thickness = 3.3
     inputs.t1 = ''
     inputs.t2 = ''
@@ -880,7 +881,7 @@ if True:
     inputs.space2 = ''
     inputs.count1 = ''
     inputs.count2 = ''
-    inputs.single = True
+    inputs.single = False
     inputs.traces = True
     inputs.verbose = True
     inputs.mark_areas = True
@@ -911,13 +912,15 @@ if inputs.single:
         print "Single slice mode entered"
     #take the input file and rotate it according to
     #input.euler_angle
-    rotate_stl(inputs)
+    widths = rotate_stl(inputs)
     #pass the rotated STL to slic3r
     call_slic3r(inputs)
     #the result is an SVG file saved to inputs.outputfile
     
     #create a document to store the data
     stack_doc = svg_data()
+    stack_doc.width = widths[0]
+    stack_doc.height = widths[1]
     #read in the data from the svg file
     read_svg(inputs.outputfile,stack_doc)
     #always get traces
@@ -979,23 +982,28 @@ else:
     if inputs.verbose:
         print "Double slice mode entered"
     #Rotate the STL file into position
-    rotate_stl(inputs)
+    widths = rotate_stl(inputs)
     #pass the rotated STL to slic3r
     call_slic3r(inputs)
     #the result is an SVG file saved to inputs.outputfile
     #create a document to store the data from the first slice
     first_slice = svg_data()
+    #get height and width data
+    first_slice.width = widths[0]
+    first_slice.height = widths[1]
     #read in the data from the svg file
     read_svg(inputs.outputfile,first_slice)
     #then orient the STL file for the second slice
-    orient_stl(inputs)
+    widths = orient_stl(inputs)
     #pass the rotated STL to slic3r again
     call_slic3r(inputs)
     #create a document to store the data from the second slice
     second_slice = svg_data()
+    second_slice.width = widths[0]
+    second_slice.height = widths[1]
     #read in the data from the SVG file
     read_svg(inputs.outputfile,second_slice)
-    #at this point, all the data is in the two files
+    #at this point, all the data is in the two objects
     
 
 #at this point, the files are sliced into SVG file(s)

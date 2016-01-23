@@ -5,6 +5,16 @@
 from stl import mesh
 import math
 
+def get_bounds(mesh):
+    #get the length of the x and y dimension of a mesh
+    mesh_min = mesh.min_
+    mesh_max = mesh.max_
+    widths = list()
+    widths.append(mesh_max[0]-mesh_min[0])
+    widths.append(mesh_max[1]-mesh_max[1])
+    return widths
+    
+
 def rotate_stl(inputs):
     #and rotate it about a given euler angle
     #the euler angle will be a z-x-z extrinsic rotation
@@ -17,6 +27,8 @@ def rotate_stl(inputs):
     centered_mesh.rotate([1.0,0.0,0.0],math.radians(inputs.euler_angle[1]))
     centered_mesh.rotate([0.0,0.0,1.0],math.radians(inputs.euler_angle[2]))
     centered_mesh.save(inputs.inputfile)
+    return get_bounds(centered_mesh)
+    
     
 def orient_stl(inputs):
     #when double slicing, the second slice happens at a 90 degree angle
@@ -30,3 +42,4 @@ def orient_stl(inputs):
     centered_mesh.rotate([0.0,0.0,1.0],math.radians(inputs.orient))
     centered_mesh.rotate([1.0,0.0,0.0],math.radians(90))
     centered_mesh.save(inputs.inputfile)
+    return get_bounds(centered_mesh)
