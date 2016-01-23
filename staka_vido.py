@@ -766,6 +766,37 @@ def check_inputs(inputs):
         if inputs.verbose:
             print "Options specify spacing and counts.  Only one can be specified."
         sys.exit(2)
+    
+    #if using spacing, check to make sure the spacing is at least twice the material thickness
+    if have_space:
+		if inputs.t1 <> '':
+			#if thickness is specified, check against what is input
+			if inputs.space1 < 2*inputs.t1:
+				print "First spacing is less than twice the material thickness. " \
+				      "Please correct and try again."
+				sys.exit(2)
+			#if the second thickness is specified, check against input
+			if inputs.t2 <> '':
+				if inputs.space2 < 2*inputs.t2:
+					print "Second spacing is less than twice the material thickness. " \
+					      "Please correct and try again."
+					sys.exit(2)
+			#if t2 is not specified, check second spacing against t1
+			else:
+				if inputs.space2 < 2*inputs.t1:
+					print "Second spacing is less than twice the material thickness. " \
+					      "Please correct and try again."
+					sys.exit(2)
+		else:
+			#if first thickness not specified, check both spacings against default
+			if inputs.space1 < 2*inputs.def_thickness:
+				print "First spacing is less than twice the material thickness. " \
+				      "Please correct and try again."
+				sys.exit(2)
+			if inputs.space2 < 2* inputs.def_thickness:
+				print "Second spacing is less than twice the material thickness. " \
+					  "Please correct and try again."
+		        sys.exit(2)
 		
         
 def load_defaults(inputs):
