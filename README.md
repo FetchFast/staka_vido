@@ -1,7 +1,7 @@
 #Staka Vido
 
-This software is written to take an STL file and pass it to Slic3r.
-It will use Slic3r's slice-to-svg function to cut the object into layers.
+This software is written to take an STL file and cut it into layers.
+The code will cut the object into layers, and output the information as as SVG or SCAD file.
 
 There are two main modes of operation.  The first mode will cut the STL file into layers that are intended to stacked directly on top of each other.
 
