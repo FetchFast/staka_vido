@@ -11,7 +11,6 @@ from stl_prep import stl_prep
 from shapely.geometry import Polygon, LineString, Point
 from hersheydata import font_data
 from rotate_stl import rotate_stl, orient_stl
-from call_slic3r import call_slic3r
 from layermaker import call_layermaker
 
 
@@ -912,7 +911,7 @@ if True:
 	inputs.thickness = 3.3
 	inputs.t1 = ''
 	inputs.t2 = ''
-	inputs.euler_angle = (0,45,0)
+	inputs.euler_angle = (0,0,0)
 	inputs.orient = ''
 	inputs.space1 = ''
 	inputs.space2 = ''
@@ -923,7 +922,7 @@ if True:
 	inputs.verbose = True
 	inputs.mark_areas = True
 	inputs.openscad = True
-	inputs.max_error = 1e-5
+	inputs.max_error = 1e-6
 	inputs.current_mesh = mesh.Mesh.from_file(inputs.inputfile)
 	
 #check inputs for errors
