@@ -1,0 +1,6 @@
+Add to readme:
+
+brew install geos
+easy_install pip
+pip install numpy-stl
+pip install Shapely
